@@ -1,0 +1,61 @@
+[project]
+name = "realtime-chat-backend"
+version = "0.1.0"
+description = "Real-time chat application backend"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aioredis>=2.0.1",
+    "alembic>=1.17.2",
+    "asyncpg>=0.31.0",
+    "environs>=14.5.0",
+    "fastapi-users[oauth,sqlalchemy]>=15.0.3",
+    "fastapi[all,standart]>=0.128.0",
+    "psycopg2-binary>=2.9.11",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.1",
+    "python-jose[cryptography]>=3.5.0",
+    "redis>=7.1.0",
+    "ruff>=0.14.10",
+    "sqlalchemy>=2.0.45",
+    "fastadmin[fastapi,sqlalchemy]>=0.2.22",
+    "uvloop>=0.22.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "F401",  # unused imports (needed for @register decorator side effects)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short -W ignore::RuntimeWarning -W ignore::pytest.PytestUnraisableExceptionWarning"
