@@ -22,6 +22,7 @@ dependencies = [
     "fastadmin[fastapi,sqlalchemy]>=0.2.22",
     "uvloop>=0.22.1",
     "asgi-lifespan>=2.1.0",
+    "orjson>=3.11.5",
 ]
 
 [tool.ruff]
@@ -39,9 +40,7 @@ select = [
     "UP", # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
-    "B008",  # do not perform function calls in argument defaults
-    "F401",  # unused imports (needed for @register decorator side effects)
+    "B008",  # FastAPI Depends/Query/File in defaults is standard practice
 ]
 
 [tool.ruff.lint.isort]

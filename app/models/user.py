@@ -1,12 +1,12 @@
 """
-User model.
+User model with optimized search indexes.
 """
 
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import Boolean, DateTime, Index, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
-    """User model with additional fields."""
+    """User model with additional fields and search indexes."""
 
     __tablename__ = "users"
 
@@ -38,6 +38,28 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    # Table args for optimized search indexes using btree
+    __table_args__ = (
+        # Case-insensitive search indexes using btree
+        Index(
+            "ix_users_username_lower",
+            func.lower(text("username")),
+            postgresql_using="btree",
+        ),
+        Index(
+            "ix_users_email_lower",
+            func.lower(text("email")),
+            postgresql_using="btree",
+        ),
+        # Composite index for active users search
+        Index(
+            "ix_users_active_search",
+            text("is_active"),
+            postgresql_using="btree",
+            postgresql_where=text("is_active = true"),
+        ),
     )
 
     # Relationships

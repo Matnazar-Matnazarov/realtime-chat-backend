@@ -28,8 +28,7 @@ class ConnectionManager:
             self.pubsub = redis.pubsub()
 
     async def connect(self, websocket: WebSocket, user_id: UUID) -> None:
-        """Accept and store WebSocket connection."""
-        await websocket.accept()
+        """Store WebSocket connection (websocket should already be accepted)."""
         self.active_connections[user_id] = websocket
 
     async def disconnect(self, user_id: UUID) -> None:
@@ -107,7 +106,7 @@ class ConnectionManager:
     ) -> None:
         """Broadcast user online status to all connected users."""
         message = {
-            "type": "user_status",
+            "type": "online_status",
             "user_id": str(user_id),
             "is_online": is_online,
         }

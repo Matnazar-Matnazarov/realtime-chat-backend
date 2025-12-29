@@ -5,46 +5,17 @@ WebSocket API routes for real-time communication.
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.security import get_user_id_from_token
 from app.core.websocket import get_manager
+from app.db.base import AsyncSessionLocal, get_db
 from app.models.user import User
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
-
-
-async def get_user_from_token(websocket: WebSocket) -> User | None:
-    """Get user from WebSocket token (simplified - in production use proper auth)."""
-    # In production, extract token from query params or headers
-    # For now, we'll use query params: ?token=...
-    token = websocket.query_params.get("token")
-    if not token:
-        return None
-
-    # Decode token and get user (simplified)
-    # In production, use proper JWT verification
-    from app.core.security import decode_access_token
-
-    payload = decode_access_token(token)
-    if not payload:
-        return None
-
-    user_id = payload.get("sub")
-    if not user_id:
-        return None
-
-    # Get user from database
-    from sqlalchemy import select
-
-    from app.db.base import AsyncSessionLocal
-    from app.models.user import User
-
-    async for session in AsyncSessionLocal():
-        result = await session.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        return user
-    return None
 
 
 @router.websocket("/{user_id}")
@@ -53,9 +24,19 @@ async def websocket_endpoint(
     user_id: UUID,
 ) -> None:
     """WebSocket endpoint for real-time chat."""
-    # In production, verify user from token
-    # For now, we'll accept user_id from path (not secure, but works for development)
-    # You should verify the token matches the user_id
+    await websocket.accept()
+
+    # Get token from query params
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return
+
+    # Verify token and get user_id
+    token_user_id = get_user_id_from_token(token, is_refresh=False)
+    if not token_user_id or str(token_user_id) != str(user_id):
+        await websocket.close(code=1008, reason="Invalid token")
+        return
 
     manager = await get_manager()
     await manager.connect(websocket, user_id)
@@ -63,12 +44,7 @@ async def websocket_endpoint(
     # Update user online status
     from datetime import datetime
 
-    from sqlalchemy import select
-
-    from app.db.base import AsyncSessionLocal
-    from app.models.user import User
-
-    async for session in AsyncSessionLocal():
+    async with AsyncSessionLocal() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if user:
@@ -77,7 +53,6 @@ async def websocket_endpoint(
             await session.commit()
             # Broadcast online status
             await manager.broadcast_online_status(user_id, True, exclude_user_id=user_id)
-        break
 
     try:
         while True:
@@ -108,7 +83,7 @@ async def websocket_endpoint(
         await manager.disconnect(user_id)
 
         # Update user offline status
-        async for session in AsyncSessionLocal():
+        async with AsyncSessionLocal() as session:
             result = await session.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
             if user:
@@ -117,4 +92,3 @@ async def websocket_endpoint(
                 await session.commit()
                 # Broadcast offline status
                 await manager.broadcast_online_status(user_id, False)
-            break

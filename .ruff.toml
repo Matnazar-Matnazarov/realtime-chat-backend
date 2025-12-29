@@ -13,9 +13,7 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
-    "B008",  # do not perform function calls in argument defaults
-    "F401",  # unused imports (needed for @register decorator side effects)
+    "B008",  # FastAPI Depends/Query/File in defaults is standard practice
 ]
 
 [lint.isort]

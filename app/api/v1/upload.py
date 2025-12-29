@@ -36,9 +36,10 @@ async def upload_file(
 
     # Check file type
     if file.content_type not in settings.ALLOWED_EXTENSIONS:
+        allowed_types = ", ".join(settings.ALLOWED_EXTENSIONS)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_EXTENSIONS)}",
+            detail=f"File type not allowed. Allowed types: {allowed_types}",
         )
 
     # Generate unique filename

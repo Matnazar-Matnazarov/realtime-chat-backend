@@ -1,5 +1,5 @@
 """
-Database base configuration.
+Database base configuration with optimized connection pooling.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -7,11 +7,21 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-# Create async engine
+# Optimized async engine with connection pooling
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DB_ECHO,
     future=True,
+    pool_size=20,
+    max_overflow=10,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    connect_args={
+        "server_settings": {
+            "application_name": "realtime_chat_backend",
+            "jit": "off",
+        }
+    },
 )
 
 # Create async session factory
