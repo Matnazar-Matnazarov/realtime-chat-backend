@@ -49,6 +49,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
+    swagger_ui_init_oauth={
+        "usePkceWithAuthorizationCodeGrant": False,
+        "clientId": "swagger",
+        "clientSecret": "",
+    },
 )
 
 # CORS middleware
