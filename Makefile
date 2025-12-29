@@ -1,16 +1,18 @@
-.PHONY: help install dev test format lint clean run migrate superuser
+.PHONY: help install dev test format lint clean run migrate superuser reset-db seed-users
 
 help:
 	@echo "Available commands:"
-	@echo "  make install    - Install dependencies"
-	@echo "  make dev        - Install dev dependencies"
-	@echo "  make test       - Run tests"
-	@echo "  make format     - Format code with ruff"
-	@echo "  make lint       - Lint code with ruff"
-	@echo "  make run        - Run development server"
-	@echo "  make migrate     - Run database migrations"
-	@echo "  make superuser  - Create superuser"
-	@echo "  make clean      - Clean cache files"
+	@echo "  make install      - Install dependencies"
+	@echo "  make dev          - Install dev dependencies"
+	@echo "  make test         - Run tests"
+	@echo "  make format       - Format code with ruff"
+	@echo "  make lint         - Lint code with ruff"
+	@echo "  make run          - Run development server"
+	@echo "  make migrate       - Run database migrations"
+	@echo "  make migrate-create - Create new migration (use: make migrate-create msg='message')"
+	@echo "  make seed-users    - Seed database with users (admin + test users)"
+	@echo "  make reset-db     - Reset database (drop all, recreate migrations)"
+	@echo "  make clean        - Clean cache files"
 
 install:
 	uv pip install -r requirements.txt
@@ -43,12 +45,15 @@ migrate:
 migrate-create:
 	uv run alembic revision --autogenerate -m "$(msg)"
 
-superuser:
-	PYTHONPATH=/home/matnazar/projects/chat-app/realtime-chat-backend uv run python scripts/create_superuser.py
+seed-users:
+	PYTHONPATH=$(shell pwd) uv run python scripts/seed_users.py
+
+reset-db:
+	PYTHONPATH=$(shell pwd) uv run python scripts/reset_database.py
 
 clean:
-	find . -type d -name __pycache__ -exec rm -r {} +
+	find . -type d -name __pycache__ -exec rm -r {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name "*.pyo" -delete
-	find . -type d -name ".pytest_cache" -exec rm -r {} +
-	find . -type d -name ".ruff_cache" -exec rm -r {} +
+	find . -type d -name ".pytest_cache" -exec rm -r {} + 2>/dev/null || true
+	find . -type d -name ".ruff_cache" -exec rm -r {} + 2>/dev/null || true

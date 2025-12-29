@@ -34,8 +34,10 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production-use-openssl-rand-hex-32"
+    REFRESH_SECRET_KEY: str = "your-refresh-secret-key-change-in-production-use-openssl-rand-hex-32"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # 15 minutes
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 days
 
     # CORS - stored as string, converted to list via computed field
     CORS_ORIGINS_STR: str = (

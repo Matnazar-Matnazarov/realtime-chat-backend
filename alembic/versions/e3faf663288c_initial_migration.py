@@ -1,8 +1,8 @@
-"""Create all tables
+"""Initial migration
 
-Revision ID: a3743058131a
-Revises: 3597efd0c167
-Create Date: 2025-12-29 02:29:42.581264
+Revision ID: e3faf663288c
+Revises: 
+Create Date: 2025-12-29 21:26:43.969723
 
 """
 from typing import Sequence, Union
@@ -11,10 +11,9 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 
-
 # revision identifiers, used by Alembic.
-revision: str = 'a3743058131a'
-down_revision: Union[str, None] = '3597efd0c167'
+revision: str = 'e3faf663288c'
+down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -39,8 +38,11 @@ def upgrade() -> None:
     sa.Column('is_verified', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_users_active_search', 'users', [sa.literal_column('is_active')], unique=False, postgresql_using='btree', postgresql_where=sa.text('is_active = true'))
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index('ix_users_email_lower', 'users', [sa.literal_column('lower(email)')], unique=False, postgresql_using='btree')
     op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
+    op.create_index('ix_users_username_lower', 'users', [sa.literal_column('lower(username)')], unique=False, postgresql_using='btree')
     op.create_table('contacts',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('user_id', PostgresUUID(as_uuid=True), nullable=False),
@@ -50,6 +52,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['contact_id'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id'),
     sa.UniqueConstraint('user_id', 'contact_id', name='unique_user_contact')
     )
     op.create_index(op.f('ix_contacts_contact_id'), 'contacts', ['contact_id'], unique=False)
@@ -64,7 +67,8 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['creator_id'], ['users.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
     )
     op.create_index(op.f('ix_groups_creator_id'), 'groups', ['creator_id'], unique=False)
     op.create_table('group_members',
@@ -75,7 +79,8 @@ def upgrade() -> None:
     sa.Column('joined_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
     )
     op.create_index(op.f('ix_group_members_group_id'), 'group_members', ['group_id'], unique=False)
     op.create_index(op.f('ix_group_members_user_id'), 'group_members', ['user_id'], unique=False)
@@ -92,7 +97,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('id')
     )
     op.create_index(op.f('ix_messages_created_at'), 'messages', ['created_at'], unique=False)
     op.create_index(op.f('ix_messages_group_id'), 'messages', ['group_id'], unique=False)
@@ -116,7 +122,10 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_contacts_user_id'), table_name='contacts')
     op.drop_index(op.f('ix_contacts_contact_id'), table_name='contacts')
     op.drop_table('contacts')
+    op.drop_index('ix_users_username_lower', table_name='users', postgresql_using='btree')
     op.drop_index(op.f('ix_users_username'), table_name='users')
+    op.drop_index('ix_users_email_lower', table_name='users', postgresql_using='btree')
     op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_index('ix_users_active_search', table_name='users', postgresql_using='btree', postgresql_where=sa.text('is_active = true'))
     op.drop_table('users')
     # ### end Alembic commands ###

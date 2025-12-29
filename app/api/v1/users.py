@@ -1,11 +1,11 @@
 """
-User API routes.
+User API routes with optimized search.
 """
 
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user, get_db
@@ -31,13 +31,27 @@ async def search_users(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserSearchResponse:
-    """Search users by username or email."""
-    search_pattern = f"%{query}%"
+    """Search users by username or email (case-insensitive).
+
+    Returns only active users, excluding the current user.
+    Uses optimized case-insensitive search with database indexes.
+    """
+    query_clean = query.strip()
+    if not query_clean:
+        return UserSearchResponse(users=[], total=0)
+
+    query_lower = query_clean.lower()
+    search_pattern = f"%{query_lower}%"
+
     result = await db.execute(
         select(User)
         .where(
-            (User.username.ilike(search_pattern) | User.email.ilike(search_pattern))
-            & (User.id != current_user.id)  # Exclude current user
+            (
+                func.lower(User.username).like(search_pattern)
+                | func.lower(User.email).like(search_pattern)
+            )
+            & (User.id != current_user.id)
+            & User.is_active
         )
         .limit(limit)
     )
@@ -77,7 +91,6 @@ async def update_online_status(
 
     await db.commit()
 
-    # Broadcast status change
     from app.core.websocket import get_manager
 
     manager = await get_manager()
