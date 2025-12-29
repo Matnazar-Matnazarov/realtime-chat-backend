@@ -19,7 +19,9 @@ from app.core.config import settings
 from app.models.user import User
 
 # JWT Strategy
-bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
+# tokenUrl must be absolute path for Swagger UI to work correctly
+# Router is mounted at /auth/jwt, so login endpoint is /auth/jwt/login
+bearer_transport = BearerTransport(tokenUrl="/auth/jwt/login")
 
 
 def get_jwt_strategy() -> JWTStrategy:
@@ -42,6 +44,59 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     reset_password_token_secret = settings.SECRET_KEY
     verification_token_secret = settings.SECRET_KEY
+
+    async def authenticate(self, credentials) -> User | None:
+        """Authenticate user by email or username.
+
+        Override to support both email and username login.
+        credentials is OAuth2PasswordRequestForm object with username and password attributes.
+        """
+        from fastapi.security import OAuth2PasswordRequestForm
+        from sqlalchemy import or_, select
+
+        # OAuth2PasswordRequestForm has username and password attributes
+        if isinstance(credentials, OAuth2PasswordRequestForm):
+            username_or_email = credentials.username
+            password = credentials.password
+        elif isinstance(credentials, dict):
+            username_or_email = credentials.get("username", "")
+            password = credentials.get("password", "")
+        else:
+            # Fallback: try to get attributes directly
+            username_or_email = getattr(credentials, "username", "")
+            password = getattr(credentials, "password", "")
+
+        if not username_or_email or not password:
+            return None
+
+        # Get user by email or username using user_db session
+        session = self.user_db.session
+        result = await session.execute(
+            select(User).where(
+                or_(User.email == username_or_email, User.username == username_or_email)
+            )
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return None
+
+        # Verify password using pwdlib (same as fastapi-users)
+        from pwdlib import PasswordHash
+        from pwdlib.hashers.argon2 import Argon2Hasher
+
+        try:
+            password_hash = PasswordHash([Argon2Hasher()])
+            if not password_hash.verify(password, user.hashed_password):
+                return None
+        except Exception:
+            return None
+
+        # Check if user is active
+        if not user.is_active:
+            return None
+
+        return user
 
     async def create(self, user_create, safe: bool = False, request: Any | None = None) -> User:
         """Create a new user with username."""

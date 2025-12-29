@@ -17,7 +17,7 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 # Disable uvloop for pytest to avoid event loop conflicts
 # Tests use standard asyncio event loop for better compatibility
@@ -34,9 +34,15 @@ if "uvloop" in sys.modules:
     del sys.modules["uvloop"]
 
 from app.core.config import settings  # noqa: E402
-from app.db.base import Base, get_db  # noqa: E402
+from app.db.base import AsyncSessionLocal, Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def anyio_backend():
+    """Use asyncio backend for anyio."""
+    return "asyncio"
 
 
 def pytest_configure(config):
@@ -53,93 +59,49 @@ def pytest_configure(config):
 # Test database URL
 TEST_DATABASE_URL = settings.DATABASE_URL.replace("/chatdb", "/test_chatdb")
 
-# Create test engine with proper pool settings
-# Use smaller pool for tests to avoid connection issues
-# Note: Engine is created per test session to avoid event loop conflicts
-test_engine = None
-TestSessionLocal = None
+# Create test engine
+engine_test = create_async_engine(
+    TEST_DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+)
 
 
-def get_test_engine():
-    """Get or create test engine (lazy initialization)."""
-    global test_engine, TestSessionLocal
-    if test_engine is None:
-        test_engine = create_async_engine(
-            TEST_DATABASE_URL,
-            echo=False,
-            pool_pre_ping=False,  # Disable pre-ping to avoid event loop issues
-            pool_size=5,  # Increased for better test reliability
-            max_overflow=5,  # Allow some overflow for concurrent tests
-            pool_recycle=3600,
-        )
-        TestSessionLocal = async_sessionmaker(
-            test_engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-    return test_engine, TestSessionLocal
-
-
-def _create_tables(sync_conn):
-    """Helper function to create tables synchronously."""
-    Base.metadata.create_all(sync_conn, checkfirst=True)
-
-
-def _drop_tables(sync_conn):
-    """Helper function to drop tables synchronously."""
-    Base.metadata.drop_all(sync_conn, checkfirst=True)
-
-
-@pytest_asyncio.fixture(scope="session")
-async def setup_database() -> AsyncGenerator[None]:
-    """Create all tables once per test session."""
-    engine, _ = get_test_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(_create_tables)
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def prepare_database() -> AsyncGenerator[None]:
+    """Prepare database for tests - drop and create all tables."""
+    async with engine_test.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
     yield
-    # Clean up: drop all tables after all tests
-    # Close all connections before disposing engine
-    try:
-        # Wait for all connections to close
-        await asyncio.sleep(0.1)
-        async with engine.begin() as conn:
-            await conn.run_sync(_drop_tables)
-    except Exception:
-        pass  # Ignore errors during teardown
-    finally:
-        # Dispose engine and wait for cleanup
-        await engine.dispose()
-        await asyncio.sleep(0.1)
+    async with engine_test.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine_test.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session(setup_database) -> AsyncGenerator[AsyncSession]:
+async def db_session(prepare_database) -> AsyncGenerator[AsyncSession]:
     """Create a test database session with transaction rollback.
 
     Each test gets a fresh session that rolls back after the test,
     ensuring test isolation without dropping/recreating tables.
-    Uses nested transaction (SAVEPOINT) for proper rollback.
     """
-    engine, session_local = get_test_engine()
+    # Ensure engine_test is initialized (prepare_database fixture should have done this)
+    if engine_test is None:
+        pytest.fail("engine_test is not initialized. prepare_database fixture may have failed.")
+
     # Create a connection and start a transaction
-    connection = await engine.connect()
-    # Start a transaction
+    connection = await engine_test.connect()
+    # Start a transaction that will be rolled back
     transaction = await connection.begin()
-    # Create a nested transaction (SAVEPOINT) for test isolation
-    # This allows us to rollback only test data, not the outer transaction
-    nested = await connection.begin_nested()
     # Bind session to this connection
-    session = session_local(bind=connection)
+    session = AsyncSessionLocal(bind=connection)
     try:
         yield session
     finally:
-        # Clean up in reverse order
+        # Clean up: rollback transaction to undo all changes
         try:
             await session.close()
-        except Exception:
-            pass
-        try:
-            await nested.rollback()
         except Exception:
             pass
         try:
@@ -153,7 +115,7 @@ async def db_session(setup_database) -> AsyncGenerator[AsyncSession]:
 
 
 @pytest.fixture(scope="function")
-def client(db_session: AsyncSession) -> Generator[TestClient]:
+def sync_client(db_session: AsyncSession) -> Generator[TestClient]:
     """Create a test client for synchronous tests."""
 
     async def override_get_db():
@@ -166,18 +128,28 @@ def client(db_session: AsyncSession) -> Generator[TestClient]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
-    """Create an async test client for async tests."""
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
+    """Create async test client for async tests."""
 
     async def override_get_db():
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        timeout=30.0,
+    ) as ac:
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_client(client: AsyncClient) -> AsyncGenerator[AsyncClient]:
+    """Alias for client fixture for backward compatibility."""
+    yield client
 
 
 @pytest_asyncio.fixture
@@ -199,13 +171,13 @@ async def test_user(db_session: AsyncSession) -> User:
     )
 
     db_session.add(user)
-    await db_session.commit()
+    await db_session.flush()  # Flush to get ID, transaction will be rolled back at test end
     await db_session.refresh(user)
     return user
 
 
 @pytest_asyncio.fixture
-async def test_superuser(db_session: AsyncSession) -> User:
+async def test_superuser(client: AsyncClient, db_session: AsyncSession) -> User:
     """Create a test superuser with unique email."""
     password_helper = PasswordHelper()
     hashed_password = password_helper.hash("admin123")
@@ -223,7 +195,7 @@ async def test_superuser(db_session: AsyncSession) -> User:
     )
 
     db_session.add(user)
-    await db_session.commit()
+    await db_session.flush()  # Flush to get ID, transaction will be rolled back at test end
     await db_session.refresh(user)
     return user
 

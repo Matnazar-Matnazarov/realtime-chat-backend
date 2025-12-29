@@ -29,7 +29,7 @@ async def test_register_user(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email(async_client: AsyncClient, test_user: User, db_session):
+async def test_register_duplicate_email(async_client: AsyncClient, test_user: User):
     """Test registration with duplicate email."""
     # test_user fixture already commits the user, so it exists in the database
     # Now try to register with the same email
