@@ -86,8 +86,12 @@ async def create_message(
 
     manager = await get_manager()
     if message_data.receiver_id:
-        # Private message
-        await manager.send_personal_message(message_dict, message_data.receiver_id)
+        # Private message - send to both sender and receiver
+        # Send to receiver
+        receiver_sent = await manager.send_personal_message(message_dict, message_data.receiver_id)
+        # Also send to sender so they see their own message in real-time
+        sender_sent = await manager.send_personal_message(message_dict, current_user.id)
+        print(f"Message sent - Receiver ({message_data.receiver_id}): {receiver_sent}, Sender ({current_user.id}): {sender_sent}")
     elif message_data.group_id:
         # Group message
         await manager.broadcast_to_group(
