@@ -30,11 +30,13 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket, user_id: UUID) -> None:
         """Store WebSocket connection (websocket should already be accepted)."""
         self.active_connections[user_id] = websocket
+        print(f"User {user_id} connected. Total connections: {len(self.active_connections)}")
 
     async def disconnect(self, user_id: UUID) -> None:
         """Remove WebSocket connection."""
         if user_id in self.active_connections:
             del self.active_connections[user_id]
+            print(f"User {user_id} disconnected. Total connections: {len(self.active_connections)}")
         # Remove from all group rooms
         for group_id in list(self.group_rooms.keys()):
             self.group_rooms[group_id].discard(user_id)
@@ -61,9 +63,12 @@ class ConnectionManager:
             try:
                 await websocket.send_json(message)
                 return True
-            except Exception:
+            except Exception as e:
+                print(f"Error sending WebSocket message to {receiver_id}: {e}")
                 await self.disconnect(receiver_id)
                 return False
+        else:
+            print(f"User {receiver_id} is not connected. Active connections: {list(self.active_connections.keys())}")
         return False
 
     async def broadcast_to_group(
