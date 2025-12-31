@@ -24,6 +24,7 @@ from app.core.utils import (
     set_refresh_token_cookie,
     user_to_dict,
 )
+from app.schemas.user import UserCreate
 
 router = APIRouter()
 
@@ -62,6 +63,25 @@ class LogoutResponse(BaseModel):
     """Logout response schema."""
 
     message: str
+
+
+class RegisterRequest(BaseModel):
+    """Register request schema."""
+
+    email: str
+    username: str
+    password: str
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class RegisterResponse(BaseModel):
+    """Register response schema."""
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: dict
 
 
 class Credentials:
@@ -189,6 +209,73 @@ async def refresh_token(
         access_token=new_access_token,
         refresh_token=new_refresh_token,
         token_type="bearer",
+    )
+
+
+@router.post(
+    "/register",
+    response_model=RegisterResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["auth"],
+)
+async def register(
+    register_data: RegisterRequest,
+    response: Response,
+    user_manager: Annotated[UserManager, Depends(get_user_manager)],
+) -> RegisterResponse:
+    """Register a new user.
+
+    Sets both access and refresh tokens in HttpOnly cookies.
+    Also returns tokens in response body for Bearer token usage.
+    """
+    # Check if user with email or username already exists
+    from sqlalchemy import or_, select
+    from app.models.user import User
+    from app.api.dependencies import get_db
+
+    async for db_session in get_db():
+        result = await db_session.execute(
+            select(User).where(
+                or_(User.email == register_data.email, User.username == register_data.username)
+            )
+        )
+        existing_user = result.scalar_one_or_none()
+        if existing_user:
+            if existing_user.email == register_data.email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered",
+                )
+            if existing_user.username == register_data.username:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already taken",
+                )
+        break  # Only check once
+
+    # Create user
+    user_create = UserCreate(
+        email=register_data.email,
+        username=register_data.username,
+        password=register_data.password,
+        first_name=register_data.first_name,
+        last_name=register_data.last_name,
+    )
+
+    user = await user_manager.create(user_create, safe=True)
+
+    # Generate tokens
+    access_token, refresh_token = create_token_pair(user)
+
+    # Set tokens in HttpOnly cookies
+    set_access_token_cookie(response, access_token)
+    set_refresh_token_cookie(response, refresh_token)
+
+    return RegisterResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        user=user_to_dict(user),
     )
 
 
