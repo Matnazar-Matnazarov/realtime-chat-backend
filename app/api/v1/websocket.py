@@ -5,14 +5,13 @@ WebSocket API routes for real-time communication.
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import get_user_id_from_token
 from app.core.websocket import get_manager
-from app.db.base import AsyncSessionLocal, get_db
+from app.db.base import AsyncSessionLocal
 from app.models.user import User
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -25,7 +24,7 @@ async def websocket_endpoint(
 ) -> None:
     """WebSocket endpoint for real-time chat."""
     print(f"🔌 WebSocket connection attempt for user_id: {user_id}")
-    
+
     try:
         await websocket.accept()
         print(f"✅ WebSocket accepted for user_id: {user_id}")
@@ -47,7 +46,9 @@ async def websocket_endpoint(
             return
 
         if str(token_user_id) != str(user_id):
-            print(f"❌ Token user_id mismatch: token_user_id={token_user_id}, path_user_id={user_id}")
+            print(
+                f"❌ Token user_id mismatch: token_user_id={token_user_id}, path_user_id={user_id}"
+            )
             await websocket.close(code=1008, reason="Token user_id mismatch")
             return
 

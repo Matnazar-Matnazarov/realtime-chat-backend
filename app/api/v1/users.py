@@ -34,9 +34,7 @@ async def update_current_user(
     # Check if username is being changed and if it's already taken
     if user_update.username and user_update.username != current_user.username:
         result = await db.execute(
-            select(User).where(
-                User.username == user_update.username, User.id != current_user.id
-            )
+            select(User).where(User.username == user_update.username, User.id != current_user.id)
         )
         existing_user = result.scalar_one_or_none()
         if existing_user:

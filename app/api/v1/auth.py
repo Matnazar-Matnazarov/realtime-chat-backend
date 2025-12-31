@@ -230,8 +230,9 @@ async def register(
     """
     # Check if user with email or username already exists
     from sqlalchemy import or_, select
-    from app.models.user import User
+
     from app.api.dependencies import get_db
+    from app.models.user import User
 
     async for db_session in get_db():
         result = await db_session.execute(
