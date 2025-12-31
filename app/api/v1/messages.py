@@ -47,6 +47,50 @@ async def create_message(
                 detail="You are not a member of this group",
             )
 
+    # Auto-create contact if private message and contact doesn't exist
+    if message_data.receiver_id:
+        from app.models.contact import Contact
+        
+        # Check if contact exists for sender (current_user -> receiver)
+        sender_contact_check = await db.execute(
+            select(Contact).where(
+                Contact.user_id == current_user.id,
+                Contact.contact_id == message_data.receiver_id,
+            )
+        )
+        sender_contact = sender_contact_check.scalar_one_or_none()
+        
+        # Create contact for sender if doesn't exist
+        if not sender_contact:
+            sender_contact = Contact(
+                id=uuid4(),
+                user_id=current_user.id,
+                contact_id=message_data.receiver_id,
+                nickname=None,
+            )
+            db.add(sender_contact)
+            print(f"✅ Auto-created contact: {current_user.id} -> {message_data.receiver_id}")
+        
+        # Check if reverse contact exists (receiver -> current_user)
+        receiver_contact_check = await db.execute(
+            select(Contact).where(
+                Contact.user_id == message_data.receiver_id,
+                Contact.contact_id == current_user.id,
+            )
+        )
+        receiver_contact = receiver_contact_check.scalar_one_or_none()
+        
+        # Create reverse contact for receiver if doesn't exist
+        if not receiver_contact:
+            receiver_contact = Contact(
+                id=uuid4(),
+                user_id=message_data.receiver_id,
+                contact_id=current_user.id,
+                nickname=None,
+            )
+            db.add(receiver_contact)
+            print(f"✅ Auto-created reverse contact: {message_data.receiver_id} -> {current_user.id}")
+
     # Create message
     message = Message(
         id=uuid4(),
@@ -75,6 +119,7 @@ async def create_message(
         "group_id": str(message.group_id) if message.group_id else None,
         "media_url": message.media_url,
         "media_type": message.media_type,
+        "is_read": message.is_read,
         "created_at": message.created_at.isoformat(),
         "sender": {
             "id": str(current_user.id),
