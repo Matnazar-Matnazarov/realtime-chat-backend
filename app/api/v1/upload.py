@@ -15,6 +15,8 @@ from app.models.user import User
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 
+
+
 # Ensure upload directory exists
 upload_dir = Path(settings.UPLOAD_DIR)
 upload_dir.mkdir(parents=True, exist_ok=True)
@@ -24,11 +26,12 @@ upload_dir.mkdir(parents=True, exist_ok=True)
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-) -> dict[str, str]:
+) -> dict[str, str | int]:
     """Upload a file (image or video)."""
     # Check file size
     contents = await file.read()
-    if len(contents) > settings.MAX_UPLOAD_SIZE:
+    file_size = len(contents)
+    if file_size > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File size exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE} bytes",
@@ -57,8 +60,8 @@ async def upload_file(
     return {
         "url": file_url,
         "filename": unique_filename,
-        "content_type": file.content_type,
-        "size": len(contents),
+        "content_type": file.content_type or "application/octet-stream",
+        "size": file_size,
     }
 
 
