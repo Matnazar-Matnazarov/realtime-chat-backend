@@ -68,7 +68,8 @@ class ConnectionManager:
                 await self.disconnect(receiver_id)
                 return False
         else:
-            print(f"User {receiver_id} is not connected. Active connections: {list(self.active_connections.keys())}")
+            active_connections = list(self.active_connections.keys())
+            print(f"User {receiver_id} is not connected. Active connections: {active_connections}")
         return False
 
     async def broadcast_to_group(

@@ -64,9 +64,7 @@ async def get_current_user_from_token(request: Request, db: AsyncSession = Depen
     return user
 
 
-async def get_current_user(
-    request: Request, db: AsyncSession = Depends(get_db)
-) -> User:
+async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     """Get current authenticated user.
 
     Supports both cookie-based and Bearer token authentication.

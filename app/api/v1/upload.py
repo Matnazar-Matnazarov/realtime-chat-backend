@@ -15,8 +15,6 @@ from app.models.user import User
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 
-
-
 # Ensure upload directory exists
 upload_dir = Path(settings.UPLOAD_DIR)
 upload_dir.mkdir(parents=True, exist_ok=True)

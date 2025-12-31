@@ -50,7 +50,7 @@ async def create_message(
     # Auto-create contact if private message and contact doesn't exist
     if message_data.receiver_id:
         from app.models.contact import Contact
-        
+
         # Check if contact exists for sender (current_user -> receiver)
         sender_contact_check = await db.execute(
             select(Contact).where(
@@ -59,7 +59,7 @@ async def create_message(
             )
         )
         sender_contact = sender_contact_check.scalar_one_or_none()
-        
+
         # Create contact for sender if doesn't exist
         if not sender_contact:
             sender_contact = Contact(
@@ -70,7 +70,7 @@ async def create_message(
             )
             db.add(sender_contact)
             print(f"✅ Auto-created contact: {current_user.id} -> {message_data.receiver_id}")
-        
+
         # Check if reverse contact exists (receiver -> current_user)
         receiver_contact_check = await db.execute(
             select(Contact).where(
@@ -79,7 +79,7 @@ async def create_message(
             )
         )
         receiver_contact = receiver_contact_check.scalar_one_or_none()
-        
+
         # Create reverse contact for receiver if doesn't exist
         if not receiver_contact:
             receiver_contact = Contact(
@@ -89,7 +89,9 @@ async def create_message(
                 nickname=None,
             )
             db.add(receiver_contact)
-            print(f"✅ Auto-created reverse contact: {message_data.receiver_id} -> {current_user.id}")
+            print(
+                f"✅ Auto-created reverse contact: {message_data.receiver_id} -> {current_user.id}"
+            )
 
     # Create message
     message = Message(
@@ -136,7 +138,10 @@ async def create_message(
         receiver_sent = await manager.send_personal_message(message_dict, message_data.receiver_id)
         # Also send to sender so they see their own message in real-time
         sender_sent = await manager.send_personal_message(message_dict, current_user.id)
-        print(f"Message sent - Receiver ({message_data.receiver_id}): {receiver_sent}, Sender ({current_user.id}): {sender_sent}")
+        print(
+            f"Message sent - Receiver ({message_data.receiver_id}): {receiver_sent}, "
+            f"Sender ({current_user.id}): {sender_sent}"
+        )
     elif message_data.group_id:
         # Group message
         await manager.broadcast_to_group(
