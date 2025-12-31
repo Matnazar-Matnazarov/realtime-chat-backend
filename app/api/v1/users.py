@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_user, get_db
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.user import UserPublic, UserSearchResponse
+from app.schemas.user import UserPublic, UserSearchResponse, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -21,6 +21,38 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user),
 ) -> UserPublic:
     """Get current user information."""
+    return UserPublic.model_validate(current_user)
+
+
+@router.patch("/me", response_model=UserPublic)
+async def update_current_user(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserPublic:
+    """Update current user information."""
+    # Check if username is being changed and if it's already taken
+    if user_update.username and user_update.username != current_user.username:
+        result = await db.execute(
+            select(User).where(
+                User.username == user_update.username, User.id != current_user.id
+            )
+        )
+        existing_user = result.scalar_one_or_none()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken",
+            )
+
+    # Update user fields
+    update_data = user_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+
+    await db.commit()
+    await db.refresh(current_user)
+
     return UserPublic.model_validate(current_user)
 
 

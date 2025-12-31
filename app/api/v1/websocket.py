@@ -25,34 +25,43 @@ async def websocket_endpoint(
 ) -> None:
     """WebSocket endpoint for real-time chat."""
     print(f"🔌 WebSocket connection attempt for user_id: {user_id}")
-    await websocket.accept()
-    print(f"✅ WebSocket accepted for user_id: {user_id}")
+    
+    try:
+        await websocket.accept()
+        print(f"✅ WebSocket accepted for user_id: {user_id}")
 
-    # Get token from query params
-    token = websocket.query_params.get("token")
-    if not token:
-        print(f"❌ Missing token for user_id: {user_id}")
-        await websocket.close(code=1008, reason="Missing token")
+        # Get token from query params
+        token = websocket.query_params.get("token")
+        if not token:
+            print(f"❌ Missing token for user_id: {user_id}")
+            await websocket.close(code=1008, reason="Missing token")
+            return
+
+        print(f"🔑 Token received for user_id: {user_id}")
+
+        # Verify token and get user_id
+        token_user_id = get_user_id_from_token(token, is_refresh=False)
+        if not token_user_id:
+            print(f"❌ Invalid or expired token for user_id: {user_id}")
+            await websocket.close(code=1008, reason="Invalid or expired token")
+            return
+
+        if str(token_user_id) != str(user_id):
+            print(f"❌ Token user_id mismatch: token_user_id={token_user_id}, path_user_id={user_id}")
+            await websocket.close(code=1008, reason="Token user_id mismatch")
+            return
+
+        print(f"✅ Token validated for user_id: {user_id}")
+        manager = await get_manager()
+        await manager.connect(websocket, user_id)
+        print(f"✅ User {user_id} connected to WebSocket manager")
+    except Exception as e:
+        print(f"❌ Error during WebSocket connection for user_id {user_id}: {e}")
+        try:
+            await websocket.close(code=1011, reason=f"Server error: {str(e)}")
+        except Exception:
+            pass
         return
-
-    print(f"🔑 Token received for user_id: {user_id}")
-
-    # Verify token and get user_id
-    token_user_id = get_user_id_from_token(token, is_refresh=False)
-    if not token_user_id:
-        print(f"❌ Invalid token for user_id: {user_id}")
-        await websocket.close(code=1008, reason="Invalid token")
-        return
-
-    if str(token_user_id) != str(user_id):
-        print(f"❌ Token user_id mismatch: token_user_id={token_user_id}, path_user_id={user_id}")
-        await websocket.close(code=1008, reason="Invalid token")
-        return
-
-    print(f"✅ Token validated for user_id: {user_id}")
-    manager = await get_manager()
-    await manager.connect(websocket, user_id)
-    print(f"✅ User {user_id} connected to WebSocket manager")
 
     # Update user online status
     from datetime import datetime
