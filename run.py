@@ -1,7 +1,3 @@
-"""
-Run script for development with uvloop support.
-"""
-
 import uvicorn
 
 if __name__ == "__main__":
